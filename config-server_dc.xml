@@ -1,0 +1,133 @@
+<!--
+   This is a Microsoft Sysmon configuation to be used on Windows server systems
+   v0.2.1 December 2016
+   Florian Roth
+
+   The focus of this configuration is
+   - hacking activity on servers / lateral movement (bad admin, attacker)
+   It is not focussed on
+   - malware detection (execution)
+   - malware detection (network connections)
+   
+   See Windows workstation base config: https://gist.github.com/Neo23x0/f56bea38d95040b70cf5
+-->
+<Sysmon schemaversion="3.20">
+   <!-- Capture MD5 Hashes -->
+   <HashAlgorithms>MD5,SHA256</HashAlgorithms>
+   <EventFiltering>
+      <!-- Log all drivers except if the signature -->
+      <!-- contains Microsoft or Windows -->
+      <DriverLoad onmatch="exclude">
+         <Signature condition="contains">microsoft</Signature>
+         <Signature condition="contains">windows</Signature>
+      </DriverLoad>
+<!-- process access -->
+<ProcessAccess onmatch="include">      
+      <TargetImage condition="is">C:\Windows\system32\lsass.exe</TargetImage>
+      <TargetImage condition="is">C:\Windows\system32\winlogon.exe</TargetImage>
+      <SourceImage condition="is">C:\WINDOWS\System32\Taskmgr.exe</SourceImage>    
+</ProcessAccess> 
+      <!-- Exclude certain processes that cause high event volumes -->
+      <ProcessCreate onmatch="exclude">
+         <Image condition="contains">Microsoft Monitoring Agent\Agent\MonitoringHost.exe</Image> <!-- scom agent for monitoring -->
+         <Image condition="contains">CcmExec.exe</Image> <!-- sccm agent -->
+      </ProcessCreate>
+      <!-- Do only log remote thread creation events with certain targets-->
+      <CreateRemoteThread onmatch="include">
+         <TargetImage condition="image">lsass.exe</TargetImage>
+         <TargetImage condition="image">winlogon.exe</TargetImage>
+         <TargetImage condition="image">svchost.exe</TargetImage>
+      </CreateRemoteThread>
+      <!-- Do not log file creation time stamps -->
+      <FileCreateTime onmatch="include"/>
+      <!-- Do not log raw disk access (caused event flooding with certain disk encryption drivers) -->
+      <RawAccessRead onmatch="include"/>
+      <!-- Do not log process termination -->
+      <ProcessTerminate onmatch="include"/>
+      <!-- Do log registry events to certain keys only (Autostart, Services, Debuggers) -->
+      <RegistryEvent onmatch="include">
+         <TargetObject condition="contains">Windows\CurrentVersion\Run</TargetObject>
+         <TargetObject condition="contains">Windows\CurrentVersion\Image File Execution Options</TargetObject>
+         <TargetObject condition="contains">CurrentControlSet\Services</TargetObject>
+         <TargetObject condition="contains">Microsoft\Windows NT\CurrentVersion\Winlogon</TargetObject>
+         <TargetObject condition="contains">Microsoft\Windows\CurrentVersion\Policies\Explorer</TargetObject>
+         <TargetObject condition="contains">Microsoft\Windows\CurrentVersion\RunOnce</TargetObject>
+         <TargetObject condition="contains">System\CurrentControlSet\Services\Tcpip\parameters</TargetObject>
+      </RegistryEvent>
+      <RegistryEvent onmatch="exclude">
+         <TargetObject condition="contains">\W32Time\</TargetObject>
+         <TargetObject condition="contains">\Toredo</TargetObject>
+      </RegistryEvent>      
+      <!-- Do not log file creation events -->
+      <FileCreate onmatch="include" />
+      <!-- Do not log if file stream is created -->
+      <FileCreateStreamHash onmatch="include" />
+      <!-- Do only log network connections to web ports -->
+      <NetworkConnect onmatch="include">
+         <Image condition="contains">cmd.exe</Image>
+         <Image condition="contains">PsExe</Image>
+         <Image condition="contains">winexe</Image>
+         <Image condition="contains">mstsc</Image>
+         <Image condition="contains">RTS2App</Image>
+         <Image condition="contains">RTS3App</Image>
+         <Image condition="contains">wmic</Image>
+      <Image condition="image">at.exe</Image> <!--Microsoft:Windows: Remote task scheduling | Credit @ion-storm -->
+      <Image condition="image">certutil.exe</Image> <!--Microsoft:Windows: Certificate tool can contact outbound | Credit @ion-storm and @FVT [ https://twitter.com/FVT/status/834433734602530817 ] -->
+      <Image condition="image">cscript.exe</Image> <!--Microsoft:WindowsScriptingHost: | Credit @Cyb3rOps [ https://gist.github.com/Neo23x0/a4b4af9481e01e749409 ] -->
+      <Image condition="image">java.exe</Image> <!--Java: Monitor usage of vulnerable application | Credit @ion-storm -->
+      <Image condition="image">mshta.exe</Image> <!--Microsoft:Windows: HTML application executes scripts without IE protections | Credit @ion-storm [ https://en.wikipedia.org/wiki/HTML_Application ] -->
+      <Image condition="image">msiexec.exe</Image> <!--Microsoft:Windows: Can install from http:// paths | Credit @vector-sec -->
+      <Image condition="image">net.exe</Image> <!--Microsoft:Windows: "net use"/"net view" used by attackers to surveil and connect with file shares from command line | Credit @ion-storm -->
+      <Image condition="image">notepad.exe</Image> <!--Microsoft:Windows: [ https://blog.cobaltstrike.com/2013/08/08/why-is-notepad-exe-connecting-to-the-internet/ ] -->
+      <Image condition="image">powershell.exe</Image> <!--Microsoft:Windows: PowerShell interface-->
+      <Image condition="image">qwinsta.exe</Image> <!--Microsoft:Windows: Remotely query login sessions on a server or workstation | Credit @ion-storm -->
+      <Image condition="image">reg.exe</Image> <!--Microsoft:Windows: Remote Registry | Credit @ion-storm -->
+      <Image condition="image">regsvr32.exe</Image> <!--Microsoft:Windows: [ https://subt0x10.blogspot.com/2016/04/bypass-application-whitelisting-script.html ] -->
+      <Image condition="image">rundll32.exe</Image> <!--Microsoft:Windows: [ https://blog.cobaltstrike.com/2016/07/22/why-is-rundll32-exe-connecting-to-the-internet/ ] -->
+      <Image condition="image">sc.exe</Image> <!--Microsoft:Windows: Remotely change Windows service settings from command line | Credit @ion-storm -->
+      <Image condition="image">wmic.exe</Image> <!--Microsoft:WindowsManagementInstrumentation: Credit @Cyb3rOps [ https://gist.github.com/Neo23x0/a4b4af9481e01e749409 ] -->
+      <Image condition="image">wscript.exe</Image> <!--Microsoft:WindowsScriptingHost: | Credit @arekfurt -->
+      <!--Relevant 3rd Party Tools: Remote Access-->
+      <Image condition="image">psexec.exe</Image> <!--Sysinternals:PsExec client side | Credit @Cyb3rOps -->
+      <Image condition="image">psexesvc.exe</Image> <!--Sysinternals:PsExec server side | Credit @Cyb3rOps -->
+      <Image condition="image">vnc.exe</Image> <!-- VNC client | Credit @Cyb3rOps -->
+      <Image condition="image">vncviewer.exe</Image> <!-- VNC client | Credit @Cyb3rOps -->
+      <Image condition="image">vncservice.exe</Image> <!-- VNC server | Credit @Cyb3rOps -->
+      <Image condition="image">winexesvc.exe</Image> <!-- Winexe service executable | Credit @Cyb3rOps -->
+      <Image condition="image">\AA_v</Image> <!-- Ammy Admin service executable (e.g. AA_v3.0.exe AA_v3.5.exe ) | Credit @Cyb3rOps -->
+      <!-- Often exploited services --> 
+      <Image condition="image">omniinet.exe</Image> <!-- HP Data Protector https://www.cvedetails.com/vulnerability-list/vendor_id-10/product_id-20499/HP-Data-Protector.html | Credit @Cyb3rOps -->
+      <Image condition="image">hpsmhd.exe</Image> <!-- HP System Management Homepage https://www.cvedetails.com/vulnerability-list/vendor_id-10/product_id-7244/HP-System-Management-Homepage.html | Credit @Cyb3rOps -->
+      <!--Malware related-->
+      <Image condition="image">tor.exe</Image> <!--Tor [ https://www.hybrid-analysis.com/sample/800bf028a23440134fc834efc5c1e02cc70f05b2e800bbc285d7c92a4b126b1c?environmentId=100 ] -->
+      <!-- exluded network traffic -->
+   </NetworkConnect>
+      <NetworkConnect onmatch="exclude">
+          <Image condition="contains">chrome.exe</Image>
+          <Image condition="contains">iexplore.exe</Image> <!-- yes, malware that injects into IE will be missed -->
+          <Image condition="contains">firefox.exe</Image>
+          <Image condition="contains">MicrosoftEdge.exe</Image>
+          <Image condition="contains">CcmExec.exe</Image> <!-- sccm agent -->
+          <Image condition="end with">bin\java.exe</Image> <!-- elasticsearch -->
+          <Image condition="end with">AppData\Roaming\Dropbox\bin\Dropbox.exe</Image> <!--Dropbox-->
+          <Image condition="contains">TmListen.exe</Image> <!--Trend Micro-->
+          <Image condition="contains">Ntrtscan.exe</Image> <!--Trend Micro-->
+          <Image condition="contains">dsa.exe</Image> <!--Trend Micro-->
+          <Image condition="contains">winlogbeat.exe</Image> <!--winlogbeat-->
+          <Image condition="contains">GROOVE.exe</Image> <!-- Onedrive -->
+          <Image condition="contains">MSOSYNC.exe</Image> <!-- MS office Sync -->
+          <DestinationIp condition="is">127.0.0.1</DestinationIp>
+          <DestinationPort condition="is">3540</DestinationPort>
+          <SourcePort condition="is">3540</SourcePort>
+      <!--SECTION: Microsoft-->
+          <Image condition="contains">OneDriveStandaloneUpdater.exe</Image> <!--Microsoft:OneDrive-->
+          <DestinationHostname condition="end with">microsoft.com</DestinationHostname> <!--Microsoft:Update delivery-->
+          <DestinationHostname condition="end with">microsoft.com.akadns.net</DestinationHostname> <!--Microsoft:Update delivery-->
+          <DestinationHostname condition="end with">microsoft.com.nsatc.net</DestinationHostname> <!--Microsoft:Update delivery-->
+          <!-- Direct access to Internet (without proxy server) -->
+          <!-- 
+          <DestinationPort condition="is not">80</DestinationPort>
+        -->
+      </NetworkConnect>
+   </EventFiltering>
+</Sysmon>
